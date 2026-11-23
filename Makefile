@@ -61,6 +61,11 @@ test: build/retro_images.h
 	@$(CC) -std=gnu99 -O2 -iquote include -iquote build -Wall -Wno-builtin-declaration-mismatch \
 	       -o /tmp/rp_t386 tests/test_emu386.c && \
 	  python3 tools/run_suite.py --name test_emu386 --min 36 -- /tmp/rp_t386
+	@echo "── test_fuzz ──────────────────────────────"
+	@echo "  a user's CD, kernel or code cannot crash Retro PC: the 0.1.1 fixes, and bounded fuzzing"
+	@$(CC) -std=gnu99 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -iquote include -iquote build \
+	       -Wno-builtin-declaration-mismatch -o /tmp/rp_tfuzz tests/test_fuzz.c && \
+	  python3 tools/run_suite.py --name test_fuzz --min 12 -- /tmp/rp_tfuzz
 	@echo "── test_retropc ───────────────────────────"
 	@echo "  the program: K-DOS and BOOT OS through it, files, the font"
 	@$(CC) $(CFLAGS) -o /tmp/rp_trp $(CORE) src/host_null.c src/plat_posix.c && \

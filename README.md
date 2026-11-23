@@ -65,7 +65,7 @@ make test       # the suites                                 (also gcc-multilib,
 | `include/` | Their headers, `keys.h` (HavenDOS key codes) and the 8x16 font |
 | `src/` | The program: `retropc.c`, the glyphs (`font.c`), and one host per platform: `host_win32.c`, `host_x11.c`, `host_null.c` (no window: scripted keys, a virtual clock) |
 | `images/` | The built-in builds, each with a SHA-256 in `IMAGES.txt` |
-| `tests/` | `test_emu86.c`, `test_emu386.c`, `test_retropc.py`; `emu86_sst.c` with `tools/check_emu86_sst.py` runs the SingleStepTests 8088 suite (dev only, downloads it) |
+| `tests/` | `test_emu86.c`, `test_emu386.c`, `test_fuzz.c` (damaged CDs, kernels and random code, under ASAN), `test_retropc.py`; `emu86_sst.c` with `tools/check_emu86_sst.py` runs the SingleStepTests 8088 suite (dev only, downloads it) |
 
 ## Licence
 
