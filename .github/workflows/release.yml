@@ -1,0 +1,108 @@
+# Build, test and publish a Retro PC release.
+#
+# Every push to main runs this, and it publishes when the version in
+# src/version.h has no release yet: a version bump publishes, and a
+# release whose build failed is retried by the next push that fixes it.
+# When the release exists the run stops after a few seconds.
+#
+# Running it by hand (Actions -> Release -> Run workflow) rebuilds the
+# current version and replaces its files.
+#
+# The tests are a gate: a red tree is not published. Everything below
+# 1.0 is a pre-release; 1.0 is the first version that boots a real
+# installation CD (ROADMAP.md).
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Which version is this
+        id: v
+        run: |
+          ver=$(sed -n 's/^#define[[:space:]]\+RETROPC_VERSION[[:space:]]\+"\([^"]*\)".*/\1/p' src/version.h)
+          [ -n "$ver" ] || { echo "::error::no RETROPC_VERSION in src/version.h"; exit 1; }
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          echo "tag=v$ver" >> "$GITHUB_OUTPUT"
+          case "$ver" in 0.*) echo "pre=true" >> "$GITHUB_OUTPUT";; *) echo "pre=false" >> "$GITHUB_OUTPUT";; esac
+          if gh release view "v$ver" >/dev/null 2>&1; then echo "exists=1" >> "$GITHUB_OUTPUT"; else echo "exists=0" >> "$GITHUB_OUTPUT"; fi
+          if [ ! -f "changelogs/v$ver.md" ]; then
+            echo "::error::changelogs/v$ver.md is missing -- write it before bumping the version"
+            exit 1
+          fi
+
+      - name: Already published
+        if: steps.v.outputs.exists == '1' && github.event_name == 'push'
+        run: echo "v${{ steps.v.outputs.ver }} is already a release; nothing to do."
+
+      - name: Toolchain
+        if: steps.v.outputs.exists == '0' || github.event_name == 'workflow_dispatch'
+        run: |
+          sudo apt-get update -qq
+          # gcc-multilib: tools/check_freestanding.py builds emu/ -m32,
+          # the way the HavenDOS kernel does
+          sudo apt-get install -y -qq --no-install-recommends \
+            gcc gcc-multilib make python3 xorriso libx11-dev gcc-mingw-w64-x86-64 zip
+
+      - name: Build
+        if: steps.v.outputs.exists == '0' || github.event_name == 'workflow_dispatch'
+        run: make all windows
+
+      - name: Test
+        if: steps.v.outputs.exists == '0' || github.event_name == 'workflow_dispatch'
+        run: make test
+
+      - name: Package
+        if: steps.v.outputs.exists == '0' || github.event_name == 'workflow_dispatch'
+        run: |
+          make dist
+          ver="${{ steps.v.outputs.ver }}"
+          git archive --format=zip --prefix="RetroPC-$ver/" -o "dist/RetroPC-$ver-source.zip" HEAD
+
+      - name: Publish
+        if: steps.v.outputs.exists == '0' || github.event_name == 'workflow_dispatch'
+        run: |
+          ver="${{ steps.v.outputs.ver }}"
+          tag="${{ steps.v.outputs.tag }}"
+          notes=$(mktemp)
+          {
+            echo "**Which file do I want?**"
+            echo ""
+            echo "| File | For |"
+            echo "|---|---|"
+            echo "| \`RetroPC-$ver-windows.zip\` | Windows: unzip, run \`RetroPC.exe\`. Nothing to install. |"
+            echo "| \`RetroPC-$ver-linux-x86_64.tar.gz\` | Linux: \`retropc\` (X11) and \`retropc-headless\` |"
+            echo "| \`RetroPC-$ver-source.zip\` | Building it yourself -- \`make && make test\` |"
+            echo ""
+            echo "---"
+            echo ""
+            cat "changelogs/v$ver.md"
+          } > "$notes"
+          files=("dist/RetroPC-$ver-windows.zip" "dist/RetroPC-$ver-linux-x86_64.tar.gz" "dist/RetroPC-$ver-source.zip")
+          for f in "${files[@]}"; do [ -f "$f" ] || { echo "::error::missing $f"; exit 1; }; done
+          preflag=(); [ "${{ steps.v.outputs.pre }}" = "true" ] && preflag=(--prerelease)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --clobber
+            gh release edit "$tag" --notes-file "$notes" "${preflag[@]}"
+          else
+            gh release create "$tag" "${files[@]}" "${preflag[@]}" \
+              --title "Retro PC $ver" --notes-file "$notes" --target "$GITHUB_SHA"
+          fi
