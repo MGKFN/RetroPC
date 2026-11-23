@@ -1,6 +1,6 @@
 # Retro PC
 
-An retro PC emulator with some cool features: Tech Haven Studios' old builds on emulated PCs, for Windows and Linux.
+A retro PC emulator with some cool features: Tech Haven Studios' old builds on emulated PCs, for Windows and Linux.
 
 Retro PC started inside [HavenDOS](https://github.com/MGKFN/HavenDOS) (Apps > Retro PC) to run the studio's oldest surviving builds. It is also a program of its own, and it is growing into a full PC emulator that boots real installation CDs. [ROADMAP.md](ROADMAP.md) has the steps.
 
